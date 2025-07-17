@@ -35,7 +35,7 @@ check_service "n8n"
 echo ""
 echo "🌐 Ollama/WebUI/n8n Endpoints:"
 check_endpoint "http://localhost:11434/api/tags" "Ollama API"
-check_endpoint "http://localhost:3001" "Open WebUI (port 3001)"
+check_endpoint "http://localhost:3002" "Open WebUI (port 3002)"
 check_endpoint "http://localhost:5678" "n8n"
 
 echo ""
