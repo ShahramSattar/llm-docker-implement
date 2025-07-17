@@ -1,0 +1,43 @@
+# Environment files
+.env
+supabase-db/.env
+.env.local
+.env.*.local
+!.env.example
+
+# Data and volumes
+volumes/
+data/
+backups/
+*.log
+*.pid
+
+# Models
+*.gguf
+*.bin
+models/
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+ssl/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
