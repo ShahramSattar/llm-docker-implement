@@ -32,7 +32,7 @@ services:
       - "3002:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_SECRET_KEY=your-secret-key-here-change-this
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
       - WEBUI_NAME=Ollama Web UI
       - ENABLE_SIGNUP=true
       # Database configuration
@@ -47,7 +47,7 @@ services:
 
   # n8n workflow automation
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: n8nio/n8n:latest
     container_name: n8n
     ports:
       - "5678:5678"
@@ -57,7 +57,8 @@ services:
       - N8N_PROTOCOL=http
       - NODE_ENV=production
       - WEBHOOK_URL=http://localhost:5678/
-      - N8N_ENCRYPTION_KEY=your-encryption-key-change-this
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       # Basic auth (optional - remove if not needed)
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
@@ -111,3 +112,5 @@ volumes:
 networks:
   app-network:
     driver: bridge
+  shared-llm-network:
+    external: true

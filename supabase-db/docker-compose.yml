@@ -209,3 +209,8 @@ services:
 volumes:
   postgres-data:
   storage-data:
+networks:
+  default:
+    driver: bridge
+  shared-llm-network:
+    external: true
