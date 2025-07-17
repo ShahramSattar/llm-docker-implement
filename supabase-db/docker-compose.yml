@@ -120,7 +120,7 @@ services:
       ERL_AFLAGS: "-proto_dist inet_tcp"
       ENABLE_TAILSCALE: "false"
       DNS_NODES: "postgres"
-      SECRET_KEY_BASE: "UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq"
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       # ADD THESE NEW VARIABLES:
       APP_NAME: "realtime"
       FLY_APP_NAME: "realtime"
