@@ -45,7 +45,28 @@ cp .env.example .env
 cp supabase-db/.env.example supabase-db/.env
 ```
 
-### 3. Configure Supabase JWT Keys
+### 3. Generate Security Keys
+
+#### Generate n8n Encryption Key
+
+**PowerShell (Windows):**
+```powershell
+# Generate a 32-character random string
+-join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_})
+```
+
+**Linux/Mac/Git Bash:**
+```bash
+# Generate using OpenSSL
+openssl rand -base64 32
+```
+
+Add the generated key to your `.env` file:
+```env
+N8N_ENCRYPTION_KEY=your-generated-32-character-key-here
+```
+
+#### Generate Supabase JWT Keys
 
 ```bash
 cd supabase-db
@@ -252,11 +273,26 @@ POSTGRES_PASSWORD=your-secure-password
 
 # n8n
 N8N_BASIC_AUTH_PASSWORD=your-n8n-password
-N8N_ENCRYPTION_KEY=your-encryption-key
+N8N_ENCRYPTION_KEY=your-32-character-encryption-key
 
 # Open WebUI
 WEBUI_SECRET_KEY=your-webui-secret
 ```
+
+**Generating N8N_ENCRYPTION_KEY:**
+
+PowerShell:
+```powershell
+# Generate and display a key
+Write-Host "N8N_ENCRYPTION_KEY=$(-join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_}))" -ForegroundColor Green
+```
+
+Bash:
+```bash
+echo "N8N_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+```
+
+**Important**: Once set, don't change the N8N_ENCRYPTION_KEY or you'll lose access to encrypted workflow data!
 
 Supabase stack (`supabase-db/.env`):
 ```env

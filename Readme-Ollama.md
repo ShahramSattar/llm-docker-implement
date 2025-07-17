@@ -40,11 +40,29 @@ POSTGRES_PASSWORD=your-secure-password
 
 # n8n
 N8N_BASIC_AUTH_PASSWORD=your-n8n-password
-N8N_ENCRYPTION_KEY=your-encryption-key
+N8N_ENCRYPTION_KEY=your-32-character-encryption-key
 
 # Open WebUI
 WEBUI_SECRET_KEY=your-webui-secret
 ```
+
+**Generating Secure Keys:**
+
+For `N8N_ENCRYPTION_KEY` (must be at least 32 characters):
+
+PowerShell:
+```powershell
+# Generate a 32-character key
+-join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_})
+```
+
+Linux/Mac/Git Bash:
+```bash
+# Generate using OpenSSL
+openssl rand -base64 32
+```
+
+**Important**: The N8N_ENCRYPTION_KEY is used to encrypt sensitive data in workflows (credentials, etc.). Once set, don't change it or you'll lose access to encrypted data!
 
 ### 3. Start Services
 
