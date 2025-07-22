@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nginx SSL on Docker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .ssl-badge {
+            display: inline-flex;
+            align-items: center;
+            background: #10b981;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .ssl-badge svg {
+            margin-right: 8px;
+        }
+        .info {
+            background: #f3f4f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .info h3 {
+            margin-top: 0;
+            color: #374151;
+        }
+        .info code {
+            background: #e5e7eb;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .status {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+        }
+        .status-item {
+            text-align: center;
+        }
+        .status-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .status-item .label {
+            color: #6b7280;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 Nginx with SSL/TLS</h1>
+        
+        <div class="ssl-badge">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+            </svg>
+            Secure Connection Active
+        </div>
+        
+        <p>Your Nginx server is running with SSL/TLS encryption on Docker!</p>
+        
+        <div class="info">
+            <h3>Connection Details:</h3>
+            <p><strong>Protocol:</strong> <span id="protocol">HTTPS</span></p>
+            <p><strong>Cipher Suite:</strong> <span id="cipher">Checking...</span></p>
+            <p><strong>Server:</strong> Nginx/Alpine on Docker</p>
+            <p><strong>Platform:</strong> Windows with WSL 2</p>
+        </div>
+        
+        <div class="status">
+            <div class="status-item">
+                <div class="value">✓</div>
+                <div class="label">SSL Active</div>
+            </div>
+            <div class="status-item">
+                <div class="value">✓</div>
+                <div class="label">HTTP/2 Enabled</div>
+            </div>
+            <div class="status-item">
+                <div class="value">✓</div>
+                <div class="label">Security Headers</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Display connection security info
+        if (window.location.protocol === 'https:') {
+            // Note: Cipher suite info is not accessible via JavaScript for security reasons
+            document.getElementById('cipher').textContent = 'TLS 1.2+ (Server Configured)';
+        } else {
+            document.getElementById('protocol').textContent = 'HTTP (Not Secure)';
+            document.getElementById('cipher').textContent = 'N/A';
+        }
+    </script>
+</body>
+</html>
