@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Ollama backend service
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.20.7
     container_name: ollama
     ports:
       - "11434:11434"
@@ -14,19 +14,27 @@ services:
       - OLLAMA_HOST=0.0.0.0
     networks:
       - app-network
+      - shared-llm-network
     restart: unless-stopped
+    mem_limit: 8g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     # Uncomment below to enable GPU support (NVIDIA)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # Open WebUI (formerly Ollama WebUI)
   open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui:v0.8.6
     container_name: open-webui
     ports:
       - "3002:8080"
@@ -40,14 +48,22 @@ services:
     volumes:
       - open_webui_data:/app/backend/data
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # n8n workflow automation
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:2.14.1
     container_name: n8n
     ports:
       - "5678:5678"
@@ -59,13 +75,27 @@ services:
       - WEBHOOK_URL=http://localhost:5678/
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-      # Basic auth (optional - remove if not needed)
+      # Basic auth
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=changeme
-      # Database - using SQLite for simplicity
-      - DB_TYPE=sqlite
-      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      # ── DATABASE ──────────────────────────────────────────────────────────────
+      # Currently using SQLite (default, no extra service needed).
+      # TO SWITCH TO POSTGRESQL:
+      #   1. Comment out the two SQLite lines below
+      #   2. Uncomment the four DB_POSTGRESDB_* lines below
+      #   3. Uncomment the entire `postgres` service block further down
+      #   4. Uncomment `postgres_data` volume at the bottom
+      #   5. Add `N8N_POSTGRES_PASSWORD` to your .env file
+      #   6. Add `depends_on: postgres: condition: service_healthy` to this service
+      # ─────────────────────────────────────────────────────────────────────────
+      - DB_TYPE=sqlite                                        # STEP 1: comment this out
+      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite   # STEP 1: comment this out
+      # - DB_TYPE=postgresdb                                  # STEP 2: uncomment
+      # - DB_POSTGRESDB_HOST=postgres                        # STEP 2: uncomment
+      # - DB_POSTGRESDB_DATABASE=n8n                         # STEP 2: uncomment
+      # - DB_POSTGRESDB_USER=n8n                             # STEP 2: uncomment
+      # - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}    # STEP 2: uncomment
       # Executions
       - EXECUTIONS_PROCESS=main
       - EXECUTIONS_DATA_SAVE_ON_ERROR=all
@@ -77,22 +107,31 @@ services:
       - ./n8n-files:/files
     networks:
       - app-network
+      - shared-llm-network
     restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-  # PostgreSQL database (optional - for production use)
-  # Uncomment if you want to use PostgreSQL instead of SQLite for n8n
+  # PostgreSQL database for n8n (production use)
+  # STEP 3: Uncomment this entire block to enable PostgreSQL for n8n
   # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: postgres
+  #   image: postgres:17-alpine
+  #   container_name: n8n-postgres
   #   environment:
   #     - POSTGRES_USER=n8n
-  #     - POSTGRES_PASSWORD=n8n_password_change_this
+  #     - POSTGRES_PASSWORD=${N8N_POSTGRES_PASSWORD}
   #     - POSTGRES_DB=n8n
   #   volumes:
   #     - postgres_data:/var/lib/postgresql/data
   #   networks:
   #     - app-network
   #   restart: unless-stopped
+  #   mem_limit: 1g
   #   healthcheck:
   #     test: ["CMD-SHELL", "pg_isready -U n8n"]
   #     interval: 10s
@@ -106,11 +145,13 @@ volumes:
     driver: local
   n8n_data:
     driver: local
-  # postgres_data:
+  # postgres_data:      # STEP 4: uncomment when switching n8n to PostgreSQL
   #   driver: local
 
 networks:
   app-network:
     driver: bridge
+  # Shared network for cross-stack communication with supabase-db.
+  # Create before starting: docker network create shared-llm-network
   shared-llm-network:
     external: true

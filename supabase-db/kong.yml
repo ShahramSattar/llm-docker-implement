@@ -1,4 +1,4 @@
-_format_version: "2.1"
+_format_version: "3.0"
 _transform: true
 
 services:
@@ -122,22 +122,19 @@ services:
         paths:
           - /pg/
 
-# Consumers with API Keys
+# Consumers with API Keys and ACL groups (Kong 3.x: groups defined inline per consumer)
 consumers:
   - username: anon
     keyauth_credentials:
-      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjIzODM0MTA3OTQsImlhdCI6MTc1MjY5MDc5NH0.5TIYPWX2a4DBdWSX8437BroBcusygRf0t-i0amn7O5g
+      - key: ${ANON_KEY}
+    acls:
+      - group: anon
 
   - username: service_role
     keyauth_credentials:
-      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MjM4MzQxMDc5NCwiaWF0IjoxNzUyNjkwNzk0fQ.y0JwFKqH84x972aNigbPMsE1H_U58du408XWPK3_5PQ
-
-# ACL Groups
-acls:
-  - consumer: anon
-    group: anon
-  - consumer: service_role
-    group: authenticated
+      - key: ${SERVICE_ROLE_KEY}
+    acls:
+      - group: authenticated
 
 # Global Plugins
 plugins:
@@ -176,4 +173,4 @@ plugins:
     config:
       add:
         headers:
-          - "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjIzODM0MTA3OTQsImlhdCI6MTc1MjY5MDc5NH0.5TIYPWX2a4DBdWSX8437BroBcusygRf0t-i0amn7O5g"
+          - "apikey: ${ANON_KEY}"

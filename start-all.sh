@@ -14,6 +14,10 @@ if [ ! -f supabase-db/.env ]; then
     exit 1
 fi
 
+# Create the shared cross-stack network if it doesn't exist
+echo "🔗 Ensuring shared-llm-network exists..."
+docker network create --driver bridge shared-llm-network 2>/dev/null || true
+
 # Start Ollama/WebUI/n8n stack
 echo "📦 Starting Ollama, WebUI, and n8n..."
 docker-compose up -d

@@ -6,29 +6,34 @@ A comprehensive AI development environment with two integrated stacks: Ollama/We
 
 ```
 llm-docker-implement/
-├── README.md                       # This file
+├── ReadMe.md                       # This file
 ├── docker-compose.yml              # Ollama + WebUI + n8n stack
+├── .env                            # Main stack environment variables
+├── .env.example                    # Environment template
+├── .gitignore
+├── start-all.sh                    # Start both stacks + shared network
+├── stop-all.sh
+├── health-check.sh
+├── backup.sh / restore.sh
+├── pull-models.sh
+├── .github/workflows/ci.yml        # GitHub Actions CI
 ├── supabase-db/
 │   ├── docker-compose.yml          # Supabase stack
 │   ├── .env                        # Supabase environment variables
-│   ├── .env.example                # Environment template
-│   ├── kong.yml                    # Kong API gateway config
-│   ├── package.json                # For JWT generation
+│   ├── .env.example                # Supabase environment template
+│   ├── kong.yml                    # Kong API gateway config (v3.x format)
+│   ├── package.json
 │   └── generate-keys.js            # JWT key generator
-├── .env                            # Main stack environment variables
-├── .env.example                    # Main environment template
-├── .gitignore                      # Git ignore rules
-├── node_modules/                   # Node dependencies
-└── package.json                    # Node package file
+└── nginx-docker/                   # Nginx (HTTP + SSL variants)
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Docker Desktop 4.0+ with Docker Compose v2.0+
-- Node.js 16+ (for Supabase JWT generation)
-- 16GB RAM minimum (32GB recommended)
-- 50GB+ free disk space
+- Node.js 18+ (for Supabase JWT generation)
+- 16 GB RAM minimum (32 GB recommended for LLM inference)
+- 50 GB+ free disk space
 
 ### 1. Clone the Repository
 
@@ -40,112 +45,131 @@ cd llm-docker-implement
 ### 2. Setup Environment Variables
 
 ```bash
-# Copy environment templates
 cp .env.example .env
 cp supabase-db/.env.example supabase-db/.env
 ```
 
 ### 3. Generate Security Keys
 
-#### Generate n8n Encryption Key
+#### n8n Encryption Key (required — do not change once set)
 
-**PowerShell (Windows):**
+**PowerShell:**
 ```powershell
-# Generate a 32-character random string
 -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_})
 ```
 
-**Linux/Mac/Git Bash:**
+**Bash / Git Bash:**
 ```bash
-# Generate using OpenSSL
 openssl rand -base64 32
 ```
 
-Add the generated key to your `.env` file:
+Add the result to `.env`:
 ```env
-N8N_ENCRYPTION_KEY=your-generated-32-character-key-here
+N8N_ENCRYPTION_KEY=your-generated-key
+N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password
 ```
 
-#### Generate Supabase JWT Keys
+#### Supabase JWT Keys
 
 ```bash
 cd supabase-db
 npm install
 node generate-keys.js
-# Copy the generated keys to supabase-db/.env
+# Copy the output into supabase-db/.env
 cd ..
 ```
 
-### 4. Start the Stacks
+Also set a strong Postgres password in `supabase-db/.env`:
+```bash
+# Generate one with:
+openssl rand -base64 16
+```
 
-You can run the stacks independently or together:
+### 4. Start Both Stacks
 
 ```bash
-# Option 1: Start both stacks
-docker-compose up -d
-cd supabase-db && docker-compose up -d && cd ..
+# Recommended: start everything at once (creates shared network automatically)
+./start-all.sh
 
-# Option 2: Start only Ollama/WebUI/n8n
-docker-compose up -d
-
-# Option 3: Start only Supabase
-cd supabase-db && docker-compose up -d && cd ..
+# Or start stacks individually (create the shared network first):
+docker network create shared-llm-network
+docker compose up -d
+cd supabase-db && docker compose up -d && cd ..
 ```
+
+---
 
 ## 🏗️ Architecture Overview
 
-### Stack 1: Ollama + WebUI + n8n
+### Stack 1: Ollama + Open WebUI + n8n
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Open WebUI                         │
-│                 (Port 3000)                          │
-├─────────────────────────────────────────────────────┤
-│        n8n                    │      Ollama          │
-│    (Port 5678)                │   (Port 11434)       │
-├───────────────────────────────┴──────────────────────┤
-│                  PostgreSQL                          │
-│                 (Port 5432)                          │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│              Open WebUI  (Port 3002)              │
+├──────────────────────────────┬───────────────────┤
+│     n8n  (Port 5678)         │  Ollama (11434)   │
+└──────────────────────────────┴───────────────────┘
+          ↕ shared-llm-network ↕
 ```
 
 ### Stack 2: Supabase
 ```
 ┌─────────────────────────────────────────────────────┐
-│               Supabase Studio                        │
-│                 (Port 3000)                          │
+│               Supabase Studio  (Port 3000)           │
 ├─────────────────────────────────────────────────────┤
-│              Kong API Gateway                        │
-│                (Port 8000)                           │
+│               Kong API Gateway  (Port 8000)          │
 ├──────────┬──────────┬──────────┬────────────────────┤
-│   Auth   │ Realtime │ Storage  │    PostgREST       │
-│  (9999)  │  (4000)  │  (5000)  │     (3001)         │
+│   Auth   │ Realtime │ Storage  │    PostgREST        │
+│  (9999)  │  (4000)  │  (5000)  │     (3001)          │
 ├──────────┴──────────┴──────────┴────────────────────┤
-│                PostgreSQL                            │
-│               (Port 54324)                           │
+│                  PostgreSQL  (Port 5432)              │
 └─────────────────────────────────────────────────────┘
+          ↕ shared-llm-network ↕
 ```
+
+Both stacks join `shared-llm-network` so n8n can call Supabase APIs directly using container hostnames (e.g. `http://kong:8000`).
+
+---
 
 ## 🌐 Service Access Points
 
-### Ollama/WebUI/n8n Stack
+### Ollama / WebUI / n8n Stack
 | Service | URL | Default Credentials |
 |---------|-----|-------------------|
-| Open WebUI | http://localhost:3000 | Create on first visit |
-| n8n | http://localhost:5678 | admin / (from .env) |
+| Open WebUI | http://localhost:3002 | Create on first visit |
+| n8n | http://localhost:5678 | admin / (from `.env`) |
 | Ollama API | http://localhost:11434 | No authentication |
-| PostgreSQL | localhost:5432 | postgres / (from .env) |
 
 ### Supabase Stack
-| Service | URL | Default Credentials |
-|---------|-----|-------------------|
-| Supabase Studio | http://localhost:3000 | No auth (uses service key) |
-| Kong API | http://localhost:8000 | API keys from .env |
-| Auth API | http://localhost:8000/auth/v1 | - |
-| REST API | http://localhost:8000/rest/v1 | - |
-| Realtime | ws://localhost:8000/realtime/v1 | - |
-| PostgreSQL | localhost:54324 | postgres / (from .env) |
+| Service | URL | Notes |
+|---------|-----|-------|
+| Supabase Studio | http://localhost:3000 | Uses service key internally |
+| Kong API | http://localhost:8000 | API keys from `supabase-db/.env` |
+| Auth API | http://localhost:8000/auth/v1 | |
+| REST API | http://localhost:8000/rest/v1 | |
+| Realtime | ws://localhost:8000/realtime/v1 | |
+| PostgreSQL | localhost:5432 | postgres / (from `supabase-db/.env`) |
 
-**⚠️ Port Conflict Note**: Both stacks use port 3000. Run them separately or modify the ports in docker-compose.yml files.
+> **Port conflict note**: Supabase Studio (3000) and Open WebUI (3002) are on different ports — no conflict when running both stacks simultaneously.
+
+---
+
+## 📦 Image Versions (pinned)
+
+| Service | Image | Version |
+|---------|-------|---------|
+| Ollama | `ollama/ollama` | `0.20.7` |
+| Open WebUI | `ghcr.io/open-webui/open-webui` | `v0.8.6` |
+| n8n | `n8nio/n8n` | `2.14.1` |
+| Supabase Postgres | `supabase/postgres` | `15.8.1.085` |
+| Supabase Studio | `supabase/studio` | `2026.04.08-sha-205cbe7` |
+| Kong | `kong` | `3.9.1` |
+| GoTrue (Auth) | `supabase/gotrue` | `v2.186.0` |
+| Realtime | `supabase/realtime` | `v2.76.5` |
+| Storage API | `supabase/storage-api` | `v1.37.8` |
+| Postgres Meta | `supabase/postgres-meta` | `v0.95.2` |
+| PostgREST | `postgrest/postgrest` | `v12.2.0` |
+
+---
 
 ## 📖 Usage Guide
 
@@ -160,21 +184,24 @@ docker exec -it ollama ollama pull llama2
 docker exec -it ollama ollama pull mistral
 docker exec -it ollama ollama pull codellama
 
-# Remove unused models
+# Or use the helper script
+./pull-models.sh
+
+# Remove a model
 docker exec -it ollama ollama rm model-name
 ```
 
-### Creating n8n Workflows with AI
+### n8n: Call Ollama from a Workflow
 
 1. Access n8n at http://localhost:5678
-2. Create HTTP Request node:
+2. Add an **HTTP Request** node:
    - URL: `http://ollama:11434/api/generate`
    - Method: POST
    - Body:
      ```json
      {
        "model": "llama2",
-       "prompt": "{{$json.prompt}}",
+       "prompt": "{{ $json.prompt }}",
        "stream": false
      }
      ```
@@ -182,286 +209,170 @@ docker exec -it ollama ollama rm model-name
 ### Integrating with Supabase
 
 ```javascript
-// Initialize Supabase client
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
   'http://localhost:8000',
-  'your-anon-key-from-env'
+  process.env.ANON_KEY
 )
 
-// Example: Store AI conversation
-async function storeConversation(userPrompt, aiResponse) {
-  const { data, error } = await supabase
-    .from('conversations')
-    .insert({
-      user_prompt: userPrompt,
-      ai_response: aiResponse,
-      model: 'llama2',
-      timestamp: new Date()
-    })
-}
+// Store an AI conversation
+const { error } = await supabase.from('conversations').insert({
+  user_prompt: userPrompt,
+  ai_response: aiResponse,
+  model: 'llama2'
+})
 ```
+
+---
 
 ## 🛠️ Common Operations
 
-### Starting Services
-
 ```bash
-# Start Ollama/WebUI/n8n stack
-docker-compose up -d
+# Start everything (recommended)
+./start-all.sh
 
-# Start Supabase stack
-cd supabase-db && docker-compose up -d && cd ..
+# Stop everything
+./stop-all.sh
 
-# Start specific service
-docker-compose up -d ollama
+# Health check all services
+./health-check.sh
+
+# View logs
+./logs.sh all          # all services
+./logs.sh ollama       # single service
+./logs.sh supabase     # all Supabase services
+
+# Restart a single service
+docker compose restart n8n
+cd supabase-db && docker compose restart studio && cd ..
+
+# Backup all data
+./backup.sh
+
+# Restore from backup
+./restore.sh backups/20260416_120000
 ```
 
-### Stopping Services
-
-```bash
-# Stop Ollama/WebUI/n8n stack
-docker-compose down
-
-# Stop Supabase stack  
-cd supabase-db && docker-compose down && cd ..
-
-# Stop everything and remove volumes (careful!)
-docker-compose down -v
-cd supabase-db && docker-compose down -v && cd ..
-```
-
-### Viewing Logs
-
-```bash
-# Ollama/WebUI/n8n logs
-docker-compose logs -f
-docker-compose logs -f ollama
-docker-compose logs -f n8n
-
-# Supabase logs
-cd supabase-db
-docker-compose logs -f
-docker-compose logs -f postgres
-```
-
-### Health Checks
-
-```bash
-# Check Ollama
-curl http://localhost:11434/api/tags
-
-# Check n8n
-curl http://localhost:5678
-
-# Check Supabase
-curl http://localhost:8000/auth/v1/health
-
-# Check all running containers
-docker ps
-```
+---
 
 ## 🔧 Configuration
 
-### Environment Variables
-
-Main stack (`.env`):
+### Main Stack `.env`
 ```env
-# PostgreSQL for n8n
-POSTGRES_PASSWORD=your-secure-password
-
-# n8n
-N8N_BASIC_AUTH_PASSWORD=your-n8n-password
-N8N_ENCRYPTION_KEY=your-32-character-encryption-key
-
-# Open WebUI
+N8N_ENCRYPTION_KEY=your-32-char-key        # Never change after first run
+N8N_BASIC_AUTH_PASSWORD=strong-password
 WEBUI_SECRET_KEY=your-webui-secret
+
+# Optional: enable PostgreSQL for n8n (see docker-compose.yml)
+# N8N_POSTGRES_PASSWORD=your-postgres-password
 ```
 
-**Generating N8N_ENCRYPTION_KEY:**
-
-PowerShell:
-```powershell
-# Generate and display a key
-Write-Host "N8N_ENCRYPTION_KEY=$(-join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_}))" -ForegroundColor Green
-```
-
-Bash:
-```bash
-echo "N8N_ENCRYPTION_KEY=$(openssl rand -base64 32)"
-```
-
-**Important**: Once set, don't change the N8N_ENCRYPTION_KEY or you'll lose access to encrypted workflow data!
-
-Supabase stack (`supabase-db/.env`):
+### Supabase `supabase-db/.env`
 ```env
-# PostgreSQL
-POSTGRES_PASSWORD=your-postgres-password
-
-# JWT
-JWT_SECRET=your-jwt-secret
-ANON_KEY=generated-anon-key
-SERVICE_ROLE_KEY=generated-service-role-key
+POSTGRES_PASSWORD=your-strong-password    # Use: openssl rand -base64 16
+JWT_SECRET=your-64-char-secret            # Use: openssl rand -base64 64
+ANON_KEY=generated-anon-key               # Use: node generate-keys.js
+SERVICE_ROLE_KEY=generated-service-key
 ```
 
 ### Port Configuration
 
-To avoid port conflicts when running both stacks:
-
-**Option 1**: Run stacks on different ports
-```yaml
-# In main docker-compose.yml
-services:
-  open-webui:
-    ports:
-      - "3001:8080"  # Change from 3000 to 3001
-```
-
-**Option 2**: Use different interfaces
-```yaml
-# In supabase-db/docker-compose.yml
-services:
-  studio:
-    ports:
-      - "127.0.0.1:3000:3000"  # Bind to localhost only
-```
-
-## 🚨 Troubleshooting
-
-### Port Conflicts
-
-If you get "port already allocated" errors:
-
-```bash
-# Find what's using a port (Windows PowerShell)
-netstat -ano | findstr :3000
-
-# Kill the process using the port
-taskkill /PID <process-id> /F
-
-# Or change the port in docker-compose.yml
-```
-
-### Memory Issues
-
-If services are slow or crashing:
-
-1. Increase Docker Desktop memory (Settings → Resources)
-2. Limit Ollama models loaded:
-   ```bash
-   docker exec -it ollama ollama rm large-model
-   ```
-
-### Connection Issues Between Stacks
-
-Since the stacks use different networks, to connect them:
-
-1. Create a shared network:
-   ```bash
-   docker network create shared-network
-   ```
-
-2. Add to both docker-compose files:
-   ```yaml
-   networks:
-     shared-network:
-       external: true
-   ```
-
-3. Add services to the shared network:
-   ```yaml
-   services:
-     ollama:
-       networks:
-         - app-network
-         - shared-network
-   ```
-
-## 🔒 Security Recommendations
-
-1. **Change all default passwords** before using in production
-2. **Generate new JWT keys** for Supabase
-3. **Use environment variables** for all sensitive data
-4. **Don't commit .env files** to version control
-5. **Enable firewalls** to restrict port access
-6. **Use HTTPS** in production with a reverse proxy
-
-## 📦 Backup and Restore
-
-### Backup All Data
-
-```bash
-#!/bin/bash
-# backup-all.sh
-
-# Create backup directory
-BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
-mkdir -p $BACKUP_DIR
-
-# Backup Ollama models
-docker run --rm -v ollama_data:/data -v $(pwd)/$BACKUP_DIR:/backup alpine tar czf /backup/ollama-models.tar.gz -C /data .
-
-# Backup n8n data
-docker exec postgres pg_dump -U postgres > $BACKUP_DIR/n8n-postgres.sql
-
-# Backup Supabase
-cd supabase-db
-docker exec supabase-postgres pg_dump -U postgres > ../$BACKUP_DIR/supabase-postgres.sql
-cd ..
-
-echo "Backup completed to $BACKUP_DIR"
-```
-
-### Restore Data
-
-```bash
-#!/bin/bash
-# restore.sh
-
-BACKUP_DIR=$1
-
-# Restore n8n database
-docker exec -i postgres psql -U postgres < $BACKUP_DIR/n8n-postgres.sql
-
-# Restore Supabase database
-cd supabase-db
-docker exec -i supabase-postgres psql -U postgres < ../$BACKUP_DIR/supabase-postgres.sql
-cd ..
-
-echo "Restore completed from $BACKUP_DIR"
-```
-
-## 🚀 Production Deployment
-
-For production deployment:
-
-1. Use separate servers for each stack
-2. Implement proper SSL/TLS with reverse proxy
-3. Use managed databases instead of Docker PostgreSQL
-4. Enable monitoring and alerting
-5. Implement backup automation
-6. Use container orchestration (Kubernetes/Swarm)
-
-## 📚 Additional Resources
-
-- [Ollama Documentation](https://ollama.ai/docs)
-- [n8n Documentation](https://docs.n8n.io)
-- [Supabase Documentation](https://supabase.io/docs)
-- [Open WebUI GitHub](https://github.com/open-webui/open-webui)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License.
+Open WebUI is already on `3002` to avoid conflicting with Supabase Studio on `3000`. To change any port, edit the `ports:` mapping in the relevant `docker-compose.yml` and update the corresponding variable in `.env`.
 
 ---
 
-Built with ❤️ using Ollama, n8n, Supabase, and Open WebUI
+## 🚨 Troubleshooting
+
+### Shared Network Missing
+```bash
+# Both stacks require this network — start-all.sh creates it automatically.
+# If running stacks manually:
+docker network create shared-llm-network
+```
+
+### Port Already Allocated
+```bash
+# Windows PowerShell
+netstat -ano | findstr :3000
+taskkill /PID <pid> /F
+
+# Mac/Linux
+lsof -i :3000
+kill <pid>
+```
+
+### Memory Issues
+If containers crash or models are slow:
+1. Open Docker Desktop → Settings → Resources → increase RAM
+2. Remove large models: `docker exec -it ollama ollama rm llama2:70b`
+3. Check resource usage: `docker stats`
+
+### n8n Can't Reach Ollama
+```bash
+# Verify the shared network exists
+docker network inspect shared-llm-network
+
+# Test connectivity from inside n8n
+docker exec n8n wget -qO- http://ollama:11434/api/tags
+```
+
+### Auth / JWT Errors in Supabase
+```bash
+# Verify keys match the JWT_SECRET
+docker exec supabase-auth env | grep JWT
+
+# Regenerate keys if needed
+cd supabase-db && node generate-keys.js
+```
+
+---
+
+## 🔒 Security Checklist
+
+- [ ] Change `POSTGRES_PASSWORD` in `supabase-db/.env` from the default
+- [ ] Change `N8N_BASIC_AUTH_PASSWORD` in `.env` from `changeme`
+- [ ] Generate a fresh `JWT_SECRET` and re-run `generate-keys.js`
+- [ ] Do not commit `.env` files to version control
+- [ ] Use HTTPS (Nginx SSL stack) for any non-localhost deployment
+- [ ] Restrict Ollama port `11434` with a firewall in production
+
+---
+
+## 📦 Backup and Restore
+
+```bash
+# Backup (creates timestamped folder in ./backups/)
+./backup.sh
+
+# List backups
+ls -la backups/
+
+# Restore
+./restore.sh backups/20260416_120000
+```
+
+---
+
+## 🚀 Production Notes
+
+1. Switch n8n from SQLite to PostgreSQL (uncomment the `postgres` service in `docker-compose.yml`)
+2. Use the Nginx SSL stack as a reverse proxy with Let's Encrypt certificates
+3. Set `ENABLE_SIGNUP=false` in Open WebUI after creating your admin account
+4. Implement automated backup scheduling (use `crontab` or a CI/CD pipeline to call `./backup.sh`)
+5. Add Prometheus + Grafana for monitoring container health and resource usage
+
+---
+
+## 📚 Resources
+
+- [Ollama Documentation](https://ollama.ai/docs)
+- [Ollama Model Library](https://ollama.ai/library)
+- [n8n Documentation](https://docs.n8n.io)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Open WebUI GitHub](https://github.com/open-webui/open-webui)
+- [Kong Documentation](https://docs.konghq.com)
+
+---
+
+Built with Ollama, n8n, Supabase, Open WebUI, and Kong.
