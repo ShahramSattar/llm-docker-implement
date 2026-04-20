@@ -1,32 +1,35 @@
-# LLM Docker Implementation - Quick Reference
+# LLM Docker Implementation — Quick Reference
 
-## 🚀 Quick Commands
+## 🚀 Starting Services
 
-### Starting Services
 ```bash
-# Start everything
+# Start everything (recommended — creates shared network automatically)
 ./start-all.sh
 
 # Start only Ollama/WebUI/n8n
-docker-compose up -d
+docker network create shared-llm-network 2>/dev/null || true
+docker compose up -d
 
 # Start only Supabase
-cd supabase-db && docker-compose up -d && cd ..
+docker network create shared-llm-network 2>/dev/null || true
+cd supabase-db && docker compose up -d && cd ..
 ```
 
-### Stopping Services
+## 🛑 Stopping Services
+
 ```bash
 # Stop everything
 ./stop-all.sh
 
 # Stop only main stack
-docker-compose down
+docker compose down
 
 # Stop only Supabase
-cd supabase-db && docker-compose down && cd ..
+cd supabase-db && docker compose down && cd ..
 ```
 
-### Service Management
+## 🩺 Service Management
+
 ```bash
 # Check health
 ./health-check.sh
@@ -36,196 +39,154 @@ cd supabase-db && docker-compose down && cd ..
 ./logs.sh ollama           # Specific service
 ./logs.sh supabase         # All Supabase services
 
-# Restart a service
-docker-compose restart n8n
-cd supabase-db && docker-compose restart studio && cd ..
+# Restart a single service
+docker compose restart n8n
+cd supabase-db && docker compose restart studio && cd ..
 ```
 
 ## 🤖 Ollama Commands
 
 ```bash
-# List models
-docker exec -it ollama ollama list
-
-# Pull a model
-docker exec -it ollama ollama pull llama2
-
-# Remove a model
-docker exec -it ollama ollama rm llama2
-
-# Run a model (interactive)
-docker exec -it ollama ollama run llama2
-
-# Get all available models
-./pull-models.sh
+docker exec -it ollama ollama list             # List installed models
+docker exec -it ollama ollama pull mistral     # Download a model
+docker exec -it ollama ollama rm llama2        # Remove a model
+docker exec -it ollama ollama run mistral      # Interactive chat
+./pull-models.sh                               # Pull several recommended models
 ```
 
-## 🔗 API Examples
+## 🔗 API Quick Tests
 
-### Ollama API
+### Ollama
 ```bash
-# Generate text
 curl -X POST http://localhost:11434/api/generate \
-  -d '{"model": "llama2", "prompt": "Hello world", "stream": false}'
-
-# Chat
-curl -X POST http://localhost:11434/api/chat \
-  -d '{"model": "llama2", "messages": [{"role": "user", "content": "Hello"}]}'
+  -H "Content-Type: application/json" \
+  -d '{"model": "llama2", "prompt": "Hello", "stream": false}'
 ```
 
-### Supabase API
+### Supabase
 ```bash
-# Test connection
 curl http://localhost:8000/rest/v1/ \
-  -H "apikey: your-anon-key" \
-  -H "Authorization: Bearer your-anon-key"
+  -H "apikey: $ANON_KEY" \
+  -H "Authorization: Bearer $ANON_KEY"
+
+curl http://localhost:8000/auth/v1/health
 ```
 
-## 📁 File Locations
+## 📁 Key Files
 
-### Configuration Files
-- Main environment: `.env`
-- Supabase environment: `supabase-db/.env`
-- Kong config: `supabase-db/kong.yml`
+| File | Purpose |
+|------|---------|
+| `.env` | Main stack secrets (n8n, WebUI keys) |
+| `supabase-db/.env` | Supabase secrets (Postgres, JWT keys) |
+| `docker-compose.yml` | Ollama + WebUI + n8n services |
+| `supabase-db/docker-compose.yml` | Supabase services |
+| `supabase-db/kong.yml` | Kong API gateway routes |
 
-### Docker Compose Files
-- Main stack: `docker-compose.yml`
-- Supabase: `supabase-db/docker-compose.yml`
+## 💾 Data Volumes
 
-### Data Volumes
-- Ollama models: `ollama_data`
-- WebUI data: `open_webui_data`
-- n8n data: `n8n_data`
-- n8n PostgreSQL: `postgres_data`
-- Supabase PostgreSQL: `supabase-db_postgres-data`
-- Supabase storage: `supabase-db_storage-data`
+| Volume | Contains |
+|--------|---------|
+| `ollama_data` | Downloaded LLM models |
+| `open_webui_data` | Conversations, WebUI config |
+| `n8n_data` | n8n workflows, SQLite database |
+| `supabase-db_postgres-data` | Supabase PostgreSQL data |
+| `supabase-db_storage-data` | Supabase uploaded files |
 
-## 🛠️ Troubleshooting
+## 🌐 Service URLs
 
-### Port Conflicts
-```bash
-# Check what's using a port
-netstat -ano | findstr :3000        # Windows
-lsof -i :3000                       # Mac/Linux
+| Service | URL | Port |
+|---------|-----|------|
+| Open WebUI | http://localhost:3002 | 3002 |
+| n8n | http://localhost:5678 | 5678 |
+| Ollama API | http://localhost:11434 | 11434 |
+| Supabase Studio | http://localhost:3000 | 3000 |
+| Supabase API (Kong) | http://localhost:8000 | 8000 |
 
-# Change ports in docker-compose.yml
-# Example: Change Open WebUI to port 3001
-ports:
-  - "3001:8080"
-```
-
-### Memory Issues
-```bash
-# Check container stats
-docker stats
-
-# Increase Docker memory in Docker Desktop settings
-# Remove large models
-docker exec -it ollama ollama rm llama2:70b
-```
-
-### Connection Issues
-```bash
-# Test Ollama
-docker exec n8n wget -qO- http://ollama:11434/api/tags
-
-# Test Supabase from main stack
-docker exec n8n wget -qO- http://host.docker.internal:8000
-
-# Check networks
-docker network ls
-```
-
-### Database Access
-```bash
-# Connect to n8n PostgreSQL
-docker exec -it postgres psql -U postgres
-
-# Connect to Supabase PostgreSQL
-docker exec -it supabase-postgres psql -U postgres
-
-# Common PostgreSQL commands
-\l          # List databases
-\dt         # List tables
-\d table    # Describe table
-\q          # Quit
-```
+> No port conflicts — Open WebUI runs on **3002**, Supabase Studio on **3000**.
 
 ## 🔐 Default Credentials
 
-### Main Stack
-- Open WebUI: Create on first visit (first user is admin)
-- n8n: `admin` / password from `.env`
-- PostgreSQL: `postgres` / password from `.env`
+| Service | Username | Password |
+|---------|----------|----------|
+| Open WebUI | — | Create on first visit (first = admin) |
+| n8n | `admin` | Value of `N8N_BASIC_AUTH_PASSWORD` in `.env` |
+| Supabase Studio | — | No login (internal service key) |
+| Supabase Postgres | `postgres` | Value of `POSTGRES_PASSWORD` in `supabase-db/.env` |
 
-### Supabase
-- Studio: No login (uses service key)
-- PostgreSQL: `postgres` / password from `supabase-db/.env`
-- API Keys: In `supabase-db/.env`
+## 🛠️ Troubleshooting
 
-## 📊 Monitoring
-
-### Check Resource Usage
+### Shared network missing
 ```bash
-# Container stats
-docker stats
-
-# Disk usage
-docker system df
-
-# Clean up unused resources
-docker system prune -a
+docker network create shared-llm-network
 ```
 
-### Service Endpoints
-- Open WebUI: http://localhost:3000
-- n8n: http://localhost:5678
-- Ollama API: http://localhost:11434
-- Supabase Studio: http://localhost:3000 (conflicts with WebUI)
-- Supabase API: http://localhost:8000
+### Port already in use
+```bash
+# Windows
+netstat -ano | findstr :3000
+taskkill /PID <pid> /F
+
+# Mac/Linux
+lsof -i :3000 && kill <pid>
+```
+
+### n8n can't reach Ollama
+```bash
+docker exec n8n wget -qO- http://ollama:11434/api/tags
+docker network inspect shared-llm-network
+```
+
+### Memory issues / containers crashing
+```bash
+docker stats                                      # Live resource usage
+docker exec -it ollama ollama rm llama2:70b       # Remove large models
+# Increase RAM in Docker Desktop → Settings → Resources
+```
+
+### Connect to Supabase PostgreSQL
+```bash
+docker exec -it supabase-postgres psql -U postgres
+# \l    list databases
+# \dt   list tables
+# \q    quit
+```
 
 ## 💾 Backup & Restore
 
 ```bash
-# Create backup
-./backup.sh
+./backup.sh                                    # Create timestamped backup
+ls -la backups/                                # List backups
+./restore.sh backups/20260416_120000           # Restore specific backup
+```
 
-# List backups
-ls -la backups/
+## 📊 Resource Monitoring
 
-# Restore from backup
-./restore.sh backups/20240115_120000
+```bash
+docker stats                     # Live CPU/memory per container
+docker system df                 # Disk usage by images/volumes
+docker system prune -a           # Remove unused images and containers (careful!)
 ```
 
 ## 🆘 Emergency Commands
 
 ```bash
-# Stop everything immediately
+# Stop all running containers
 docker stop $(docker ps -q)
 
-# Remove all containers
-docker rm $(docker ps -a -q)
-
-# Reset everything (WARNING: Deletes all data!)
+# Full reset (WARNING: deletes all data)
 ./reset-all.sh
 
-# Check Docker logs
-docker logs container_name --tail 50
+# View container logs
+docker logs <container_name> --tail 50 -f
 
-# Enter a container
-docker exec -it container_name bash
+# Open a shell inside a container
+docker exec -it <container_name> bash
 ```
-
-## 📝 Notes
-
-1. **Port 3000 Conflict**: Both Open WebUI and Supabase Studio use port 3000. Run them separately or change ports.
-
-2. **Network Isolation**: The two stacks use different Docker networks. To connect them, create a shared network.
-
-3. **GPU Support**: Uncomment GPU sections in docker-compose.yml for NVIDIA GPU acceleration.
-
-4. **Production Use**: Always change default passwords, use HTTPS, and implement proper security measures.
 
 ---
 
-For detailed documentation, see the main README.md
+For full documentation see:
+- [ReadMe.md](ReadMe.md) — Main guide
+- [Readme-Ollama.md](Readme-Ollama.md) — Ollama/WebUI/n8n details
+- [ReadMe-Supabase.md](ReadMe-Supabase.md) — Supabase details
+- [nginx-docker/ReadME-Nginx.md](nginx-docker/ReadME-Nginx.md) — Nginx/SSL setup

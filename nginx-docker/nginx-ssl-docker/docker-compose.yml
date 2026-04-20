@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  nginx-dev:
+    build: .
+    container_name: nginx-ssl-dev
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      # Mount for live reload during development
+      - ./html:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl_self.conf:/etc/nginx/ssl_self.conf:ro
+      - ./ssl/self-signed:/etc/nginx/ssl/self-signed:ro
+      - ./nginx/common:/etc/nginx/common:ro
+    restart: unless-stopped
+    environment:
+      - NGINX_ENV=development

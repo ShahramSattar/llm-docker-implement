@@ -1,120 +1,116 @@
 # Ollama + Open WebUI + n8n Stack
 
-A powerful AI development stack combining local LLM inference (Ollama), a modern chat interface (Open WebUI), and workflow automation (n8n) with PostgreSQL database.
+A powerful AI development stack combining local LLM inference (Ollama), a modern chat interface (Open WebUI), and workflow automation (n8n).
 
 ## 🎯 What This Stack Provides
 
 - **Run LLMs locally** without cloud dependencies
 - **ChatGPT-like interface** for interacting with models
 - **Automate AI workflows** with visual programming
-- **Persistent storage** for conversations and workflows
 - **API access** for custom integrations
+- **Cross-stack connectivity** to Supabase via shared Docker network
 
 ## 📋 Prerequisites
 
-- Docker Desktop 4.0+ with Docker Compose
-- 16GB RAM minimum (32GB recommended for larger models)
-- 20GB+ free disk space for models
+- Docker Desktop 4.0+ with Docker Compose v2.0+
+- 16 GB RAM minimum (32 GB recommended for larger models)
+- 20 GB+ free disk space for models
 - NVIDIA GPU (optional, for acceleration)
+
+## 📦 Image Versions
+
+| Service | Image | Version |
+|---------|-------|---------|
+| Ollama | `ollama/ollama` | `0.20.7` |
+| Open WebUI | `ghcr.io/open-webui/open-webui` | `v0.8.6` |
+| n8n | `n8nio/n8n` | `2.14.1` |
 
 ## 🚀 Quick Start
 
 ### 1. Clone and Setup
 
 ```bash
-# Clone the repository
 git clone <repository-url>
-cd ollama-webui-n8n
-
-# Create environment file
+cd llm-docker-implement
 cp .env.example .env
 ```
 
 ### 2. Configure Environment
 
-Edit `.env` file:
+Edit `.env`:
 
 ```env
-# PostgreSQL
-POSTGRES_PASSWORD=your-secure-password
+# IMPORTANT: Generate once and never change — losing this breaks encrypted workflow data
+N8N_ENCRYPTION_KEY=your-32-char-key
 
-# n8n
-N8N_BASIC_AUTH_PASSWORD=your-n8n-password
-N8N_ENCRYPTION_KEY=your-32-character-encryption-key
+# n8n web UI login (username: admin)
+N8N_BASIC_AUTH_PASSWORD=choose-a-strong-password
 
-# Open WebUI
+# Open WebUI session secret
 WEBUI_SECRET_KEY=your-webui-secret
 ```
 
-**Generating Secure Keys:**
-
-For `N8N_ENCRYPTION_KEY` (must be at least 32 characters):
+**Generate `N8N_ENCRYPTION_KEY`:**
 
 PowerShell:
 ```powershell
-# Generate a 32-character key
 -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_})
 ```
 
-Linux/Mac/Git Bash:
+Bash / Git Bash:
 ```bash
-# Generate using OpenSSL
 openssl rand -base64 32
 ```
-
-**Important**: The N8N_ENCRYPTION_KEY is used to encrypt sensitive data in workflows (credentials, etc.). Once set, don't change it or you'll lose access to encrypted data!
 
 ### 3. Start Services
 
 ```bash
-# Start all services
-docker-compose up -d
+# From the project root (creates shared network automatically):
+./start-all.sh
 
-# Check status
-docker-compose ps
-
-# View logs
-docker-compose logs -f
+# Or start only this stack:
+docker network create shared-llm-network 2>/dev/null || true
+docker compose up -d
 ```
 
 ### 4. Pull AI Models
 
 ```bash
-# Pull recommended models
+# Individual models
 docker exec -it ollama ollama pull llama2
 docker exec -it ollama ollama pull mistral
 docker exec -it ollama ollama pull codellama
 
-# List available models
+# Or use the helper script (pulls several at once)
+./pull-models.sh
+
+# List installed models
 docker exec -it ollama ollama list
 ```
 
 ## 🌐 Access Points
 
-| Service | URL | Credentials | Purpose |
-|---------|-----|------------|---------|
-| Open WebUI | http://localhost:3000 | Create on first visit | Chat with AI models |
-| n8n | http://localhost:5678 | admin / (your password) | Workflow automation |
-| Ollama API | http://localhost:11434 | No auth | Direct API access |
-| PostgreSQL | localhost:5432 | postgres / (your password) | Database access |
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Open WebUI | http://localhost:3002 | Create on first visit (first user = admin) |
+| n8n | http://localhost:5678 | admin / (from `.env`) |
+| Ollama API | http://localhost:11434 | No auth |
 
 ## 📖 Service Guide
 
-### Ollama - LLM Backend
+### Ollama — LLM Backend
 
-Ollama provides the AI inference engine for running large language models locally.
+Ollama manages model downloads, quantization, and inference. It exposes an OpenAI-compatible HTTP API.
 
-#### Available Models
+#### Recommended Models
 
-| Model | Size | Use Case | Pull Command |
-|-------|------|----------|--------------|
-| llama2 | 7B | General purpose | `ollama pull llama2` |
-| mistral | 7B | Fast, efficient | `ollama pull mistral` |
-| codellama | 7B | Code generation | `ollama pull codellama` |
-| phi | 2.7B | Lightweight | `ollama pull phi` |
-| neural-chat | 7B | Conversational | `ollama pull neural-chat` |
-| llama2:13b | 13B | Better quality | `ollama pull llama2:13b` |
-| llama2:70b | 70B | Best quality | `ollama pull llama2:70b` |
+| Model | Size | Best For |
+|-------|------|----------|
+| `llama2` | 7B | General purpose |
+| `mistral` | 7B | Fast, efficient |
+| `codellama` | 7B | Code generation |
+| `phi` | 2.7B | Lightweight / low RAM |
+| `llama2:13b` | 13B | Higher quality output |
 
 #### API Usage
 
@@ -122,20 +118,14 @@ Ollama provides the AI inference engine for running large language models locall
 # Generate text
 curl -X POST http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama2",
-    "prompt": "Write a haiku about Docker",
-    "stream": false
-  }'
+  -d '{"model": "llama2", "prompt": "Write a haiku about Docker", "stream": false}'
 
 # Chat completion
 curl -X POST http://localhost:11434/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama2",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
+    "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
 
@@ -143,155 +133,72 @@ curl -X POST http://localhost:11434/api/chat \
 
 ```python
 import requests
-import json
 
 def query_ollama(prompt, model="llama2"):
     response = requests.post(
         "http://localhost:11434/api/generate",
-        json={
-            "model": model,
-            "prompt": prompt,
-            "stream": False
-        }
+        json={"model": model, "prompt": prompt, "stream": False}
     )
     return response.json()["response"]
 
-# Example usage
-result = query_ollama("Explain Docker in simple terms")
-print(result)
+print(query_ollama("Explain Docker in simple terms"))
 ```
 
-### Open WebUI - Chat Interface
+### Open WebUI — Chat Interface
 
-A feature-rich web interface for interacting with Ollama models.
+A full-featured chat UI accessible at http://localhost:3002.
 
-#### Features
+**First-time setup:**
+1. Navigate to http://localhost:3002
+2. Click "Sign Up" — the first account automatically becomes admin
+3. Select a model from the model dropdown
 
-- 💬 **Multiple Conversations**: Organize chats in folders
-- 🎨 **Custom Prompts**: Save and reuse system prompts
-- 📎 **File Upload**: Process documents and images (with compatible models)
-- 🔍 **Search**: Find past conversations
-- 👥 **Multi-user**: Support for multiple users
-- 🌙 **Dark Mode**: Easy on the eyes
-- 📱 **Responsive**: Works on mobile devices
-
-#### First Time Setup
-
-1. Navigate to http://localhost:3000
-2. Click "Sign Up" to create admin account
-3. First user automatically becomes admin
-4. Configure available models in Settings
-
-#### Advanced Configuration
-
+**Useful environment variables (in `docker-compose.yml`):**
 ```yaml
-# docker-compose.yml
-environment:
-  - ENABLE_SIGNUP=false  # Disable after creating accounts
-  - DEFAULT_MODELS=llama2,mistral  # Set default models
-  - WEBUI_AUTH=true  # Enable authentication
+- ENABLE_SIGNUP=false      # Disable after creating your admin account
+- DEFAULT_MODELS=llama2    # Pre-select a model
 ```
 
-### n8n - Workflow Automation
+### n8n — Workflow Automation
 
-Create powerful AI-powered automation workflows with visual programming.
+Visual workflow editor for AI-powered automation at http://localhost:5678.
 
-#### Ollama Integration in n8n
+n8n uses **SQLite by default** for its database (stored in the `n8n_data` volume). For production, uncomment the `postgres` service in `docker-compose.yml` and set `DB_TYPE=postgresdb`.
 
-1. **HTTP Request Node Configuration**:
-   - URL: `http://ollama:11434/api/generate`
-   - Method: POST
-   - Body:
-     ```json
-     {
-       "model": "llama2",
-       "prompt": "{{$json.prompt}}",
-       "stream": false
-     }
-     ```
+#### Call Ollama from n8n
 
-2. **Example Workflows**:
+Add an **HTTP Request** node:
+- URL: `http://ollama:11434/api/generate`
+- Method: `POST`
+- Body:
+  ```json
+  {
+    "model": "llama2",
+    "prompt": "{{ $json.prompt }}",
+    "stream": false
+  }
+  ```
 
-##### Email Assistant
+#### Example Workflows
+
 ```
-[Gmail Trigger] → [Ollama: Analyze] → [Ollama: Generate Response] → [Gmail: Send]
-```
+Email Assistant:
+[Gmail Trigger] → [Ollama: Analyze] → [Ollama: Draft Reply] → [Gmail: Send]
 
-##### Content Generator
-```
-[Schedule Trigger] → [RSS Feed] → [Ollama: Summarize] → [Wordpress: Post]
-```
+Content Generator:
+[Schedule] → [RSS Feed] → [Ollama: Summarize] → [Wordpress: Post]
 
-##### Code Review Bot
-```
+Code Review Bot:
 [GitHub Webhook] → [Ollama: Review Code] → [GitHub: Comment]
-```
-
-#### n8n Workflow Examples
-
-##### Customer Support Bot
-```json
-{
-  "nodes": [
-    {
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "parameters": {
-        "path": "support",
-        "responseMode": "onReceived"
-      }
-    },
-    {
-      "name": "Analyze Intent",
-      "type": "n8n-nodes-base.httpRequest",
-      "parameters": {
-        "url": "http://ollama:11434/api/generate",
-        "method": "POST",
-        "body": {
-          "model": "llama2",
-          "prompt": "Classify this support ticket: {{$json.message}}",
-          "system": "You are a support ticket classifier. Respond with one of: technical, billing, general"
-        }
-      }
-    }
-  ]
-}
-```
-
-### PostgreSQL Database
-
-Stores data for n8n workflows and Open WebUI conversations.
-
-#### Access Database
-
-```bash
-# Connect via CLI
-docker exec -it postgres psql -U postgres
-
-# Common queries
-\l  # List databases
-\dt # List tables
-\q  # Quit
-```
-
-#### Backup & Restore
-
-```bash
-# Backup
-docker exec postgres pg_dump -U postgres n8n > backup.sql
-
-# Restore
-docker exec -i postgres psql -U postgres n8n < backup.sql
 ```
 
 ## 🛠️ Configuration
 
 ### GPU Support (NVIDIA)
 
-Enable GPU acceleration for faster inference:
+Uncomment the `deploy` block in `docker-compose.yml` for the `ollama` service:
 
 ```yaml
-# docker-compose.yml
 services:
   ollama:
     deploy:
@@ -303,229 +210,140 @@ services:
               capabilities: [gpu]
 ```
 
-### Memory Optimization
+Also ensure the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) is installed.
+
+### Memory Tuning
 
 ```yaml
-# Adjust based on your system
-services:
-  ollama:
-    environment:
-      - OLLAMA_NUM_PARALLEL=2  # Parallel requests
-      - OLLAMA_MAX_LOADED_MODELS=2  # Models in memory
-      - OLLAMA_MEMORY_LIMIT=8GB  # Memory per model
+# In docker-compose.yml, under ollama environment:
+- OLLAMA_NUM_PARALLEL=2        # Parallel inference requests
+- OLLAMA_MAX_LOADED_MODELS=2   # Models kept in VRAM simultaneously
 ```
 
-### Custom Models
+The `ollama` container has a `mem_limit: 8g` by default. Adjust in `docker-compose.yml` to match your system.
+
+### Custom / Imported Models
 
 ```bash
-# Import GGUF models
-docker cp ./my-model.gguf ollama:/root/.ollama/models/
-
-# Create from Modelfile
+# Create a custom model from a Modelfile
 docker exec -it ollama bash
-cat > Modelfile << EOF
-FROM llama2
-SYSTEM You are a helpful coding assistant.
+cat > Modelfile << 'EOF'
+FROM mistral
+SYSTEM You are a helpful coding assistant specializing in Python.
 PARAMETER temperature 0.2
 EOF
-ollama create code-assistant -f Modelfile
+ollama create python-assistant -f Modelfile
 ```
+
+### Switching n8n to PostgreSQL
+
+1. Uncomment the `postgres` service in `docker-compose.yml`
+2. Set `N8N_POSTGRES_PASSWORD` in `.env`
+3. Update n8n environment variables:
+   ```yaml
+   - DB_TYPE=postgresdb
+   - DB_POSTGRESDB_HOST=postgres
+   - DB_POSTGRESDB_DATABASE=n8n
+   - DB_POSTGRESDB_USER=n8n
+   - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}
+   ```
 
 ## 📊 Monitoring & Performance
 
-### Resource Usage
-
 ```bash
-# Monitor container resources
+# Live resource usage for all containers
 docker stats
 
-# Check model memory usage
+# Check Ollama model memory
 docker exec ollama ps aux | grep ollama
+
+# Check available disk space inside Ollama
+docker exec ollama df -h
 ```
-
-### Performance Tuning
-
-1. **Model Selection**:
-   - Smaller models (phi, mistral) for speed
-   - Larger models (llama2:13b) for quality
-
-2. **Batch Processing**:
-   ```javascript
-   // Process multiple prompts efficiently
-   const batchProcess = async (prompts) => {
-     return Promise.all(prompts.map(p => queryOllama(p)))
-   }
-   ```
-
-3. **Caching**:
-   - n8n caches workflow results
-   - Implement Redis for custom caching
 
 ## 🚨 Troubleshooting
 
-### Common Issues
-
-#### 1. Model Won't Load
+### Model Won't Load
 ```bash
-# Check available space
+# Check disk space
 docker exec ollama df -h
 
-# Clear unused models
-docker exec ollama ollama rm unused-model
+# Remove unused models to free space
+docker exec ollama ollama rm large-model
 
 # Restart Ollama
-docker-compose restart ollama
+docker compose restart ollama
 ```
 
-#### 2. Slow Response Times
-- Reduce model size (use 7B instead of 13B)
+### Slow Response Times
+- Use a smaller model (7B instead of 13B)
 - Enable GPU acceleration
-- Increase memory allocation
-- Use quantized models
+- Increase Docker Desktop memory in Settings → Resources
+- Use a quantized model variant (e.g. `mistral:7b-q4_0`)
 
-#### 3. n8n Can't Connect to Ollama
+### n8n Can't Reach Ollama
 ```bash
-# Test connection
-docker exec n8n curl http://ollama:11434/api/tags
+# Test from inside the n8n container
+docker exec n8n wget -qO- http://ollama:11434/api/tags
 
-# Check network
-docker network ls
-docker network inspect ollama-webui-n8n_app-network
+# Verify the shared network exists and both containers are on it
+docker network inspect shared-llm-network
 ```
 
-#### 4. Database Issues
+### Reset n8n Data (SQLite)
 ```bash
-# Reset n8n database
-docker-compose stop n8n
-docker exec postgres psql -U postgres -c "DROP DATABASE n8n;"
-docker exec postgres psql -U postgres -c "CREATE DATABASE n8n;"
-docker-compose start n8n
+docker compose stop n8n
+docker volume rm llm-docker-implement_n8n_data
+docker compose start n8n
 ```
 
-### Debug Commands
-
+### Debug Logs
 ```bash
-# Ollama logs
 docker logs ollama --tail 100 -f
-
-# Test model
-docker exec -it ollama ollama run llama2 "test"
-
-# n8n logs
 docker logs n8n --tail 100 -f
-
-# WebUI logs
 docker logs open-webui --tail 100 -f
 ```
 
 ## 🔧 Advanced Usage
 
-### Custom API Endpoints
-
-Create a simple API server that uses Ollama:
-
-```python
-# api_server.py
-from flask import Flask, request, jsonify
-import requests
-
-app = Flask(__name__)
-
-@app.route('/api/complete', methods=['POST'])
-def complete():
-    data = request.json
-    response = requests.post(
-        'http://localhost:11434/api/generate',
-        json={
-            'model': data.get('model', 'llama2'),
-            'prompt': data['prompt'],
-            'stream': False
-        }
-    )
-    return jsonify(response.json())
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-```
-
-### Integrate with Your Application
+### Node.js Client
 
 ```javascript
-// Node.js example
-const axios = require('axios');
+const axios = require('axios')
 
 class OllamaClient {
   constructor(baseURL = 'http://localhost:11434') {
-    this.baseURL = baseURL;
+    this.baseURL = baseURL
   }
 
   async generate(prompt, model = 'llama2') {
-    const response = await axios.post(`${this.baseURL}/api/generate`, {
-      model,
-      prompt,
-      stream: false
-    });
-    return response.data.response;
+    const { data } = await axios.post(`${this.baseURL}/api/generate`, {
+      model, prompt, stream: false
+    })
+    return data.response
   }
 
   async chat(messages, model = 'llama2') {
-    const response = await axios.post(`${this.baseURL}/api/chat`, {
-      model,
-      messages,
-      stream: false
-    });
-    return response.data.message;
+    const { data } = await axios.post(`${this.baseURL}/api/chat`, {
+      model, messages, stream: false
+    })
+    return data.message
   }
 }
 
-// Usage
-const ollama = new OllamaClient();
-const response = await ollama.generate('Write a function to sort an array');
+const ollama = new OllamaClient()
+const result = await ollama.generate('Write a function to sort an array in Python')
 ```
 
-## 📚 Best Practices
+## 📚 Resources
 
-1. **Model Selection**:
-   - Use smaller models for real-time applications
-   - Use larger models for quality-critical tasks
-   - Test different models for your use case
-
-2. **Prompt Engineering**:
-   - Be specific and clear
-   - Use system prompts for consistent behavior
-   - Include examples for better results
-
-3. **Resource Management**:
-   - Unload models when not in use
-   - Monitor memory usage
-   - Use model quantization for efficiency
-
-4. **Security**:
-   - Don't expose Ollama directly to internet
-   - Use API keys for n8n webhooks
-   - Sanitize user inputs
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 🔗 Additional Resources
-
-- [Ollama Documentation](https://github.com/jmorganca/ollama/blob/main/docs/README.md)
+- [Ollama Documentation](https://github.com/ollama/ollama/blob/main/docs/README.md)
 - [Ollama Model Library](https://ollama.ai/library)
+- [Ollama API Reference](https://github.com/ollama/ollama/blob/main/docs/api.md)
 - [n8n Documentation](https://docs.n8n.io)
 - [n8n Community Workflows](https://n8n.io/workflows)
 - [Open WebUI GitHub](https://github.com/open-webui/open-webui)
 
 ---
 
-Happy AI Development! 🚀
+Happy AI Development!

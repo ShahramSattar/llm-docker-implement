@@ -1,0 +1,23 @@
+# Certificates
+*.pem
+*.key
+*.crt
+*.csr
+
+# Let's Encrypt
+certbot/
+
+# Logs
+*.log
+
+# Environment files with secrets
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/

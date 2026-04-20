@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-compose:
+    name: Validate Docker Compose files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env from example (main stack)
+        run: cp .env.example .env && printf '\nN8N_ENCRYPTION_KEY=ci-test-key-32chars-minimum\nWEBUI_SECRET_KEY=ci-test-secret-key\nN8N_BASIC_AUTH_PASSWORD=ci-test-password\n' >> .env
+
+      - name: Create .env from example (supabase stack)
+        run: |
+          cp supabase-db/.env.example supabase-db/.env
+          printf '\nJWT_SECRET=ci-test-jwt-secret-at-least-32-chars-long\nANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.ZopqoUt20nEV8rw6HtnRmaiXw45KDb7uD0HDkoFJxMc\nSERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.ZopqoUt20nEV8rw6HtnRmaiXw45KDb7uD0HDkoFJxMc\nSECRET_KEY_BASE=ci-test-secret-key-base-at-least-64-characters-long-here\nPOSTGRES_PASSWORD=ci-test-postgres-password\n' >> supabase-db/.env
+
+      - name: Validate main docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Validate supabase docker-compose.yml
+        run: docker compose -f supabase-db/docker-compose.yml config --quiet
+
+  lint-shell-scripts:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck --severity=warning \
+            start-all.sh \
+            stop-all.sh \
+            health-check.sh \
+            pull-models.sh \
+            backup.sh \
+            restore.sh \
+            logs.sh \
+            reset-all.sh \
+            quick-start.sh || true
+
+  check-env-examples:
+    name: Check .env.example files are complete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify .env.example exists
+        run: |
+          test -f .env.example || (echo "Missing .env.example" && exit 1)
+          test -f supabase-db/.env.example || (echo "Missing supabase-db/.env.example" && exit 1)
+
+      - name: Ensure .env files are gitignored
+        run: |
+          git check-ignore .env && echo ".env is ignored" || (echo "WARNING: .env is not gitignored!" && exit 1)
+          git check-ignore supabase-db/.env && echo "supabase-db/.env is ignored" || (echo "WARNING: supabase-db/.env is not gitignored!" && exit 1)
