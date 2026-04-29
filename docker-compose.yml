@@ -2,11 +2,14 @@ version: '3.8'
 
 services:
   # Ollama backend service
+  # Note: Port 11434 is NOT published to the host. All external traffic must go
+  # through the ollama-dashboard proxy below so it can be monitored.
+  # Internal containers can still reach Ollama directly via http://ollama:11434.
   ollama:
     image: ollama/ollama:0.20.7
     container_name: ollama
-    ports:
-      - "11434:11434"
+    expose:
+      - "11434"
     volumes:
       - ollama_data:/root/.ollama
     environment:
@@ -19,10 +22,10 @@ services:
     mem_limit: 8g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     # Uncomment below to enable GPU support (NVIDIA)
     deploy:
       resources:
@@ -32,6 +35,32 @@ services:
               count: 1
               capabilities: [gpu]
 
+    # Ollama Dashboard Monitor
+  # Acts as a transparent proxy in front of Ollama on port 11434.
+  # Any client hitting http://localhost:11434 is automatically monitored.
+  ollama-dashboard:
+    image: node:20-alpine
+    container_name: ollama-dashboard
+    working_dir: /app
+    ports:
+      - "11434:4000"
+      - "5173:5173"
+    environment:
+      - PORT=4000
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ENABLE_SAMPLE_TRAFFIC=false
+    volumes:
+      - D:/Shahram/ollama-dashboard-monitor:/app
+      - /app/node_modules          # <-- ADD THIS (anonymous volume)
+    command: sh -c "apk add --no-cache python3 make g++ && npm install && npm run dev -- --host"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - app-network
+      - shared-llm-network
+    restart: unless-stopped
+  
   # Open WebUI (formerly Ollama WebUI)
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.8.6
@@ -39,7 +68,8 @@ services:
     ports:
       - "3002:8080"
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # Point to dashboard proxy (port 4000) instead of directly to Ollama
+      - OLLAMA_BASE_URL=http://ollama-dashboard:4000
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
       - WEBUI_NAME=Ollama Web UI
       - ENABLE_SIGNUP=true
@@ -72,13 +102,14 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
-      - WEBHOOK_URL=http://localhost:5678/
+      - WEBHOOK_URL=http://ctgis412.esri.local:5678/
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       # Basic auth
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE}
       # ── DATABASE ──────────────────────────────────────────────────────────────
       # Currently using SQLite (default, no extra service needed).
       # TO SWITCH TO POSTGRESQL:
@@ -89,13 +120,13 @@ services:
       #   5. Add `N8N_POSTGRES_PASSWORD` to your .env file
       #   6. Add `depends_on: postgres: condition: service_healthy` to this service
       # ─────────────────────────────────────────────────────────────────────────
-      - DB_TYPE=sqlite                                        # STEP 1: comment this out
-      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite   # STEP 1: comment this out
-      # - DB_TYPE=postgresdb                                  # STEP 2: uncomment
-      # - DB_POSTGRESDB_HOST=postgres                        # STEP 2: uncomment
-      # - DB_POSTGRESDB_DATABASE=n8n                         # STEP 2: uncomment
-      # - DB_POSTGRESDB_USER=n8n                             # STEP 2: uncomment
-      # - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}    # STEP 2: uncomment
+      # - DB_TYPE=sqlite                                        # STEP 1: comment this out
+      # - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite   # STEP 1: comment this out
+      - DB_TYPE=postgresdb                                  # STEP 2: uncomment
+      - DB_POSTGRESDB_HOST=postgres                        # STEP 2: uncomment
+      - DB_POSTGRESDB_DATABASE=n8n                         # STEP 2: uncomment
+      - DB_POSTGRESDB_USER=n8n                             # STEP 2: uncomment
+      - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}    # STEP 2: uncomment
       # Executions
       - EXECUTIONS_PROCESS=main
       - EXECUTIONS_DATA_SAVE_ON_ERROR=all
@@ -105,6 +136,9 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n-files:/files
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - app-network
       - shared-llm-network
@@ -119,24 +153,24 @@ services:
 
   # PostgreSQL database for n8n (production use)
   # STEP 3: Uncomment this entire block to enable PostgreSQL for n8n
-  # postgres:
-  #   image: postgres:17-alpine
-  #   container_name: n8n-postgres
-  #   environment:
-  #     - POSTGRES_USER=n8n
-  #     - POSTGRES_PASSWORD=${N8N_POSTGRES_PASSWORD}
-  #     - POSTGRES_DB=n8n
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   networks:
-  #     - app-network
-  #   restart: unless-stopped
-  #   mem_limit: 1g
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U n8n"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  postgres:
+    image: postgres:17-alpine
+    container_name: n8n-postgres
+    environment:
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=${N8N_POSTGRES_PASSWORD}
+      - POSTGRES_DB=n8n
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   ollama_data:
@@ -145,8 +179,8 @@ volumes:
     driver: local
   n8n_data:
     driver: local
-  # postgres_data:      # STEP 4: uncomment when switching n8n to PostgreSQL
-  #   driver: local
+  postgres_data:      # STEP 4: uncomment when switching n8n to PostgreSQL
+    driver: local
 
 networks:
   app-network:
