@@ -15,6 +15,7 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_HOST=0.0.0.0
+      - ENABLE_SAMPLE_TRAFFIC=false
       - NVIDIA_VISIBLE_DEVICES=all
     networks:
       - app-network
@@ -40,7 +41,7 @@ services:
   # Acts as a transparent proxy in front of Ollama on port 11434.
   # Any client hitting http://localhost:11434 is automatically monitored.
   ollama-dashboard:
-    image: node:20-alpine
+    image: node:20-slim
     container_name: ollama-dashboard
     working_dir: /app
     ports:
@@ -50,17 +51,25 @@ services:
       - PORT=4000
       - OLLAMA_BASE_URL=http://ollama:11434
       - ENABLE_SAMPLE_TRAFFIC=false
+      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - D:/Shahram/ollama-dashboard-monitor:/app
-      - /app/node_modules          # <-- ADD THIS (anonymous volume)
-    command: sh -c "apk add --no-cache python3 make g++ && npm install && npm run dev -- --host"
+      - /app/node_modules
+    command: sh -c "apt-get update && apt-get install -y --no-install-recommends python3 make g++ pciutils && npm install && npm run dev -- --host"
     depends_on:
       ollama:
         condition: service_healthy
     networks:
       - app-network
-      - shared-llm-network
     restart: unless-stopped
+    # GPU access for systeminformation to read GPU metrics
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility]
   
   # Open WebUI (formerly Ollama WebUI)
   open-webui:
